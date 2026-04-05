@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeAI</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+
+    <div id="authBox" class="w-full max-w-md bg-gray-800 p-8 rounded-3xl border border-gray-700 shadow-2xl animate-pulse-slow">
+        <h1 class="text-4xl font-bold text-center text-indigo-400 mb-6">LifeAI</h1>
+        <input type="email" id="email" placeholder="Email" class="w-full bg-gray-700 p-4 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-indigo-500">
+        <input type="password" id="pass" placeholder="Password" class="w-full bg-gray-700 p-4 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-indigo-500">
+        <button id="loginBtn" class="w-full bg-indigo-500 p-4 rounded-xl font-bold mb-3 hover:bg-indigo-600">Login</button>
+        <button id="signupBtn" class="w-full bg-gray-700 p-4 rounded-xl font-bold hover:bg-gray-600">Sign Up</button>
+    </div>
+
+    <div id="dashboard" class="hidden w-full max-w-5xl mx-auto">
+        <div class="flex justify-between items-center mb-10">
+            <h1 class="text-3xl font-bold text-indigo-400">LifeAI</h1>
+            <button id="logout" class="text-red-400 font-bold">Logout</button>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-xl">
+                    <input type="text" id="goalInput" placeholder="What is your focus today?" class="w-full bg-gray-900 p-4 rounded-xl mb-4 outline-none border border-gray-700">
+                    <select id="styleInput" class="w-full bg-gray-900 p-4 rounded-xl mb-6 outline-none border border-gray-700 cursor-pointer">
+                        <option value="Friendly Assistant">🤖 Friendly Assistant</option>
+                        <option value="Strict Sergeant">🪖 Strict Sergeant</option>
+                        <option value="Sarcastic Friend">😏 Sarcastic Friend</option>
+                    </select>
+                    <button id="genBtn" class="w-full bg-indigo-500 p-4 rounded-xl font-bold hover:bg-indigo-600 transition-all active:scale-95">✨ Generate Plan</button>
+                </div>
+
+                <div class="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-xl min-h-[200px]">
+                    <h2 class="text-xl font-semibold mb-4">Your AI Schedule</h2>
+                    <div id="output" class="text-gray-300 whitespace-pre-wrap leading-relaxed">No active plan.</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-xl h-fit">
+                <h2 class="text-xl font-semibold mb-4">Weekly Focus</h2>
+                <canvas id="chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2DC5GF2ahtrz5-j30eFPduVXzOgbkG8E",
+            authDomain: "lifeai-5fea4.firebaseapp.com",
+            projectId: "lifeai-5fea4",
+            storageBucket: "lifeai-5fea4.firebasestorage.app",
+            messagingSenderId: "684664026129",
+            appId: "1:684664026129:web:89312e22c0d357482d2db0"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // UPDATE THIS AFTER VERCEL DEPLOYMENT
+        const API_URL = "https://your-project-name.vercel.app/api/generate";
+
+        const $ = id => document.getElementById(id);
+
+        // Authentication Handlers
+        $('loginBtn').onclick = () => signInWithEmailAndPassword(auth, $('email').value, $('pass').value).catch(e => alert(e.message));
+        $('signupBtn').onclick = () => createUserWithEmailAndPassword(auth, $('email').value, $('pass').value).catch(e => alert(e.message));
+        $('logout').onclick = () => signOut(auth);
+
+        onAuthStateChanged(auth, async user => {
+            if (user) {
+                $('authBox').classList.add('hidden');
+                $('dashboard').classList.remove('hidden');
+                document.body.classList.replace('items-center', 'items-start');
+                
+                // Load from Firestore
+                const snap = await getDoc(doc(db, "plans", user.uid));
+                if (snap.exists()) $('output').innerText = snap.data().text;
+                
+                // Init Chart
+                new Chart($('chart'), { type: 'bar', data: { labels: ['M','T','W','T','F','S','S'], datasets: [{ label: 'Hours', data: [3,5,4,6,2,0,0], backgroundColor: '#6366f1'}] } });
+            } else {
+                $('dashboard').classList.add('hidden');
+                $('authBox').classList.remove('hidden');
+                document.body.classList.replace('items-start', 'items-center');
+            }
+        });
+
+        // AI Generation Handler
+        $('genBtn').onclick = async () => {
+            const goal = $('goalInput').value; if(!goal) return;
+            $('output').innerText = "AI is crafting your day...";
+            
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({goal: goal, personality: $('styleInput').value})
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    // Save to Permanent Firebase Storage
+                    await setDoc(doc(db, "plans", auth.currentUser.uid), {text: data.schedule});
+                    $('output').innerText = data.schedule;
+                }
+            } catch (err) {
+                $('output').innerText = "Error connecting to AI. Check your Vercel link.";
+            }
+        };
+    </script>
+</body>
+</html>
